@@ -103,13 +103,14 @@ def play_score(card, mana, my_board, op_board):
 
     return card_score, target
 
-def compute_plays(my_hand, my_board, op_board, can_attack, mana):
+def compute_plays_before(my_hand, my_board, op_board, can_attack, mana):
     can_play = True
     plays = []
     targets = []
 
     while can_play:
-        playable_0 = [card for card in my_hand if card['cost'] <= mana and card['type'] == 0]
+        # only charge minions before attacking
+        playable_0 = [card for card in my_hand if card['cost'] <= mana and card['type'] == 0 and 'C' in card['abilities']]
         if len(my_board) == 6:
             playable_0 = []
         playable_1 = [card for card in my_hand if card['cost'] <= mana and card['type'] == 1]
@@ -119,7 +120,7 @@ def compute_plays(my_hand, my_board, op_board, can_attack, mana):
         if not op_board:
             playable_2 = []
         playable_3 = [card for card in my_hand if card['cost'] <= mana and card['type'] == 3]
-        playable = copy.copy(playable_0 + playable_1 + playable_2 + playable_3)
+        playable = copy.deepcopy(playable_0 + playable_1 + playable_2 + playable_3)
 
         if not playable:
             can_play = False
@@ -135,7 +136,7 @@ def compute_plays(my_hand, my_board, op_board, can_attack, mana):
             hand_pos = np.argwhere(np.array([c['instance'] for c in my_hand]) == round_play)[0][0]
             my_hand.pop(hand_pos)
             if card_type == 0:
-                my_board.append(copy.copy(round_play_card))
+                my_board.append(copy.deepcopy(round_play_card))
             elif card_type > 1 and round_target != -1:
                 target_pos = np.argwhere(np.array([c['instance'] for c in op_board]) == round_target)[0][0]
                 target_card = op_board[target_pos]
@@ -151,6 +152,33 @@ def compute_plays(my_hand, my_board, op_board, can_attack, mana):
             targets.append(round_target)
 
     return plays, targets
+
+def compute_plays_after(my_hand, my_board, op_board, can_attack, mana):
+    can_play = True
+    summons = []
+
+    while can_play:
+        playable = copy.deepcopy([card for card in my_hand if card['cost'] <= mana and card['type'] == 0])
+        if len(my_board) == 6:
+            playable = []
+
+        if not playable:
+            can_play = False
+        else:
+            round_scores, round_targets = zip(*[play_score(card, mana, my_board, op_board) for card in playable])
+            round_play_pos = np.argmax(round_scores)
+            round_play_card = playable[round_play_pos]
+            round_play = round_play_card['instance']
+            cost = round_play_card['cost']
+
+            hand_pos = np.argwhere(np.array([c['instance'] for c in my_hand]) == round_play)[0][0]
+            my_hand.pop(hand_pos)
+            my_board.append(copy.deepcopy(round_play_card))
+            mana -= cost
+    
+            summons.append(round_play)
+
+    return summons
 
 def compute_attacks(can_attack, op_board):
     attackers = []
@@ -239,7 +267,7 @@ while True: # update my_rune, op_rune?
             my_board.append(card)
         else:
             op_board.append(card)
-    can_attack = copy.copy(my_board)
+    can_attack = copy.deepcopy(my_board)
 
     if turn < 30: # draft phase
         scores = [draft_score(card, my_deck) for card in my_hand]
@@ -249,10 +277,10 @@ while True: # update my_rune, op_rune?
 
     else: # battle phase
         actions = []
-
         played = False
-        plays, targets = compute_plays(copy.copy(my_hand), copy.copy(my_board), copy.copy(op_board), copy.copy(can_attack), my_mana) # play phase
 
+        plays, targets = compute_plays_before(copy.deepcopy(my_hand), copy.deepcopy(my_board), copy.deepcopy(op_board), copy.deepcopy(can_attack), my_mana) # before-attack play phase
+        print('before-attack', plays, targets, file=sys.stderr)
         for i in range(len(plays)):
             play = plays[i]
             target = targets[i]
@@ -271,9 +299,9 @@ while True: # update my_rune, op_rune?
             my_hand.pop(play_pos)
 
             if card_type == 0:
-                my_board.append(copy.copy(card))
+                my_board.append(copy.deepcopy(card))
                 if 'C' in card['abilities']:
-                    can_attack.append(copy.copy(card))
+                    can_attack.append(copy.deepcopy(card))
 
             elif card_type == 1:
                 for board in [can_attack, my_board]:
@@ -286,7 +314,7 @@ while True: # update my_rune, op_rune?
                             if v != '-':
                                 target_card['abilities'] = target_card['abilities'][:i] + v + target_card['abilities'][i+1:]
                         if 'C' in target_card['abilities'] and target not in [c['instance'] for c in can_attack]:
-                            can_attack.append(copy.copy(target_card))
+                            can_attack.append(copy.deepcopy(target_card))
                     except IndexError:
                         pass
 
@@ -320,11 +348,79 @@ while True: # update my_rune, op_rune?
             played = True
 
         attacked = False
-        attackers, targets = compute_attacks(can_attack, op_board) # attack phase
-
+        attackers, targets = compute_attacks(copy.deepcopy(can_attack), copy.deepcopy(op_board)) # attack phase
+        print('attack', attackers, targets, file=sys.stderr)
         for i in range(len(attackers)):
-            actions.append('ATTACK ' + str(attackers[i]) + ' ' + str(targets[i]))
+            attacker = attackers[i]
+            target = targets[i]
+
+            actions.append('ATTACK ' + str(attacker) + ' ' + str(target))
+
+            if target == -1:
+                attacker_pos = np.argwhere(np.array([c['instance'] for c in my_board]) == attacker)[0][0]
+                attacker_card = my_board[attacker_pos]
+                attacker_atk = attacker_card['atk']
+                op_hp -= attacker_atk
+                if 'D' in attacker_card['abilities']:
+                    my_hp += attacker_atk
+
+            else:
+                target_pos = np.argwhere(np.array([c['instance'] for c in op_board]) == target)[0][0]
+                target_card = op_board[target_pos]
+                target_atk = target_card['atk']
+                attacker_pos = np.argwhere(np.array([c['instance'] for c in my_board]) == attacker)[0][0]
+                attacker_card = my_board[attacker_pos]
+                attacker_atk = attacker_card['atk']
+    
+                if target_atk > 0:
+                    if 'W' in attacker_card['abilities']:
+                        attacker_card['abilities'] = attacker_card['abilities'].replace('W', '-')
+                    elif 'L' in target_card['abilities']:
+                        attacker_card['hp'] = 0
+                    else:
+                        attacker_card['hp'] -= target_atk
+                if attacker_atk > 0:
+                    if 'W' in target_card['abilities']:
+                        target_card['abilities'] = target_card['abilities'].replace('W', '-')
+                    elif 'L' in attacker_card['abilities']:
+                        target_card['hp'] = min(target_card['hp'] - attacker_atk, 0)
+                        if 'D' in attacker_card['abilities']:
+                            my_hp += attacker_atk
+                    else:
+                        target_card['hp'] -= attacker_atk
+                        if 'D' in attacker_card['abilities']:
+                            my_hp += attacker_atk
+                can_attack_pos = np.argwhere(np.array([c['instance'] for c in can_attack]) == attacker)[0][0]
+                can_attack[can_attack_pos] = copy.deepcopy(attacker_card)
+    
+                if target_card['hp'] <= 0:
+                    op_board.pop(target_pos)
+                    if 'B' in attacker_card['abilities']:
+                        op_hp += target_card['hp']
+                if attacker_card['hp'] <= 0:
+                    my_board.pop(attacker_pos)
+                    can_attack.pop(can_attack_pos)
+
             attacked = True
+
+        summons = compute_plays_after(copy.deepcopy(my_hand), copy.deepcopy(my_board), copy.deepcopy(op_board), copy.deepcopy(can_attack), my_mana) # after-attack play phase
+        print('after-attack', summons, file=sys.stderr)
+        for i in range(len(summons)):
+            summon = summons[i]
+
+            actions.append('SUMMON ' + str(summon))
+
+            play_pos = np.argwhere(np.array([c['instance'] for c in my_hand]) == summon)[0][0]
+            card = my_hand[play_pos]
+            if 'C' in card['abilities']:
+                guard = False
+                for op_card in op_board:
+                    if 'G' in op_card['abilities']:
+                        guard = True
+                if not guard:
+                    actions.append('ATTACK ' + str(summon) + ' -1') # can be done better
+
+            played = True
 
         if not played and not attacked:
             actions = ['PASS']
