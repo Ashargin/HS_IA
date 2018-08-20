@@ -2,6 +2,11 @@ import sys
 import numpy as np
 import copy
 
+shufflePlayer0Seed=5036069161849345279
+seed=6379298569125033000
+draftChoicesSeed=614555576919018226
+shufflePlayer1Seed=-5156132984039376233
+
 turn = 0
 my_deck = []
 draft_vals = {1: 60, 2: 50, 3: 55, 4: 55, 5: 50, 6: 55, 7: 65, 8: 60, 9: 65, 10: 50, 11: 58, 
@@ -108,6 +113,11 @@ def compute_plays_before(my_hand, my_board, op_board, can_attack, mana):
     plays = []
     targets = []
 
+    if [1 for c in my_hand if c['type'] == 0]:
+        max_cost_creature = max([c['cost'] for c in my_hand if c['type'] == 0])
+        if not [1 for c in my_hand if c['cost'] == max_cost_creature and c['type'] == 0 and 'C' in c['abilities']]:
+            mana -= max_cost_creature
+
     while can_play:
         # only charge minions before attacking
         playable_0 = [card for card in my_hand if card['cost'] <= mana and card['type'] == 0 and 'C' in card['abilities']]
@@ -180,60 +190,303 @@ def compute_plays_after(my_hand, my_board, op_board, can_attack, mana):
 
     return summons
 
-def compute_attacks(can_attack, op_board):
+def compute_attacks(can_attack, op_board, op_hp=1000, guards=False):
     attackers = []
     targets = []
-    for card in can_attack:
-        attacker = card['instance']
-        attackers.append(attacker)
-        if card['atk'] > 0:
-            guard = False
-            guard_pos = 0
-            for i, op_card in enumerate(op_board):
-                if 'G' in op_card['abilities']:
-                    guard = True
-                    guard_pos = i
-            if not guard:
-                targets.append(-1)
-            else:
-                op_card = op_board[guard_pos]
-                attacked = op_card['instance']
-                targets.append(attacked)
-                if 'W' in op_card['abilities']:
-                    op_card['abilities'] = op_card['abilities'].replace('W', '-')
+    if guards:
+        op_board = [c for c in op_board if 'G' in c['abilities']]
+
+    if not guards and sum([c['atk'] for c in can_attack]) >= op_hp:
+        return can_attack, op_board, [c['instance'] for c in can_attack], [-1 for i in range(len(can_attack))]
+
+    clearing_wards = True
+    enemy_wards = copy.deepcopy([c for c in op_board if 'W' in c['abilities']])
+    while clearing_wards and enemy_wards:
+        candidates = copy.deepcopy([c for c in can_attack if 'L' not in c['abilities'] and c['atk'] > 0])
+        if not candidates:
+            clearing_wards = False
+        else:
+            target_pos = np.argmax([c['atk'] for c in enemy_wards])
+            target_card = enemy_wards[target_pos]
+            enemy_wards.pop(target_pos)
+            finding_candidate = True
+            while finding_candidate and candidates:
+                lowest_atk = min([c['atk'] for c in candidates])
+                lowest_atks = [c for c in candidates if c['atk'] == lowest_atk]
+                higher_hps = [c for c in lowest_atks if c['hp'] > target_card['atk']]
+                attacker_card = None
+                if higher_hps:
+                    attacker_card = higher_hps[np.argmax([c['hp'] for c in higher_hps])]
                 else:
-                    if 'L' in card['abilities']:
-                        op_card['hp'] = 0
-                    else:
-                        op_card['hp'] -= card['atk']
-                    if op_card['hp'] <= 0:
-                        op_board.pop(guard_pos)
+                    attacker_card = lowest_atks[np.argmin([c['hp'] for c in lowest_atks])]
+                if attacker_card['atk'] <= 3 and (attacker_card['hp'] > target_card['atk'] or attacker_card['hp'] <= target_card['atk'] - 2):
+                    finding_candidate = False
+                    attacker = attacker_card['instance']
+                    target = target_card['instance']
+    
+                    attackers.append(attacker)
+                    targets.append(target)
+    
+                    target_pos = np.argwhere(np.array([c['instance'] for c in op_board]) == target)[0][0]
+                    target_card = op_board[target_pos]
+                    target_card['abilities'] = target_card['abilities'].replace('W', '-')
+                    attacker_pos = np.argwhere(np.array([c['instance'] for c in can_attack]) == attacker)[0][0]
+                    can_attack.pop(attacker_pos)
+                else:
+                    attacker = attacker_card['instance']
+                    candidate_pos = np.argwhere(np.array([c['instance'] for c in candidates]) == attacker)[0][0]
+                    candidates.pop(candidate_pos)
+
+    wards = copy.deepcopy([c for c in can_attack if 'W' in c['abilities'] and c['atk'] > 0])
+    while wards:
+        if guards and not [1 for c in op_board if 'G' in c['abilities']]:
+            return can_attack, op_board, attackers, targets
+
+        attacker_card = wards[np.argmax([c['atk'] for c in wards])]
+        attacker = attacker_card['instance']
+        ward_pos = np.argwhere(np.array([c['instance'] for c in wards]) == attacker)[0][0]
+        wards.pop(ward_pos)
+        ward_targets = copy.deepcopy([c for c in op_board if c['hp'] <= attacker_card['atk'] and 'W' not in c['abilities']])
+        if 'L' in attacker_card['abilities']:
+            ward_targets = copy.deepcopy([c for c in op_board if 'W' not in c['abilities']])
+        target_card = None
+        if ward_targets:
+            max_atk = max([c['atk'] for c in ward_targets])
+            max_atks = [c for c in ward_targets if c['atk'] == max_atk]
+            lethal_enemies = [c for c in ward_targets if 'L' in c['abilities']]
+            if lethal_enemies:
+                max_atks = lethal_enemies
+            target_card = max_atks[np.argmax([c['hp'] for c in max_atks])]
+        elif [1 for c in op_board if 'W' not in c['abilities']]:
+            ward_targets = copy.deepcopy([c for c in op_board if 'W' not in c['abilities']])
+            max_atk = max([c['atk'] for c in ward_targets])
+            max_atks = [c for c in ward_targets if c['atk'] == max_atk]
+            lethal_enemies = [c for c in ward_targets if 'L' in c['abilities']]
+            if lethal_enemies:
+                max_atks = lethal_enemies
+            target_card = max_atks[np.argmax([c['hp'] for c in max_atks])]
+
+        if target_card is not None:
+            target = target_card['instance']
+            attackers.append(attacker)
+            targets.append(target)
+            target_pos = np.argwhere(np.array([c['instance'] for c in op_board]) == target)[0][0]
+            target_card = op_board[target_pos]
+            if 'L' in attacker_card['abilities']:
+                target_card['hp'] = 0
+            else:
+                target_card['hp'] -= attacker_card['atk']
+            if target_card['hp'] <= 0:
+                op_board.pop(target_pos)
+            attacker_pos = np.argwhere(np.array([c['instance'] for c in can_attack]) == attacker)[0][0]
+            can_attack.pop(attacker_pos)
+        elif not guards:
+            attackers.append(attacker)
+            targets.append(-1)
+            attacker_pos = np.argwhere(np.array([c['instance'] for c in can_attack]) == attacker)[0][0]
+            can_attack.pop(attacker_pos)
+
+    lethals = copy.deepcopy([c for c in can_attack if 'L' in c['abilities'] and c['atk'] > 0])
+    while lethals:
+        if guards and not [1 for c in op_board if 'G' in c['abilities']]:
+            return can_attack, op_board, attackers, targets
+
+        attacker_card = lethals[np.argmin([c['hp'] for c in lethals])]
+        attacker = attacker_card['instance']
+        lethal_pos = np.argwhere(np.array([c['instance'] for c in lethals]) == attacker)[0][0]
+        lethals.pop(lethal_pos)
+        lethal_targets = copy.deepcopy([c for c in op_board if c['atk'] < attacker_card['hp'] and 'W' not in c['abilities']])
+        target_card = None
+        if lethal_targets:
+            max_hp = max([c['hp'] for c in lethal_targets])
+            max_hps = [c for c in lethal_targets if c['hp'] == max_hp]
+            target_card = max_hps[np.argmax([c['atk'] for c in max_hps])]
+        elif [1 for c in op_board if 'W' not in c['abilities']]:
+            lethal_targets = copy.deepcopy([c for c in op_board if 'W' not in c['abilities']])
+            max_hp = max([c['hp'] for c in lethal_targets])
+            max_hps = [c for c in lethal_targets if c['hp'] == max_hp]
+            target_card = max_hps[np.argmax([c['atk'] for c in max_hps])]
+
+        if target_card is not None:
+            target = target_card['instance']
+            attackers.append(attacker)
+            targets.append(target)
+            target_pos = np.argwhere(np.array([c['instance'] for c in op_board]) == target)[0][0]
+            op_board.pop(target_pos)
+            attacker_pos = np.argwhere(np.array([c['instance'] for c in can_attack]) == attacker)[0][0]
+            can_attack.pop(attacker_pos)
+        elif not guards:
+            attackers.append(attacker)
+            targets.append(-1)
+            attacker_pos = np.argwhere(np.array([c['instance'] for c in can_attack]) == attacker)[0][0]
+            can_attack.pop(attacker_pos)
+
+    enemy_lethals = copy.deepcopy([c for c in op_board if 'L' in c['abilities'] and 'W' not in c['abilities']])
+    while enemy_lethals:
+        if guards and not [1 for c in op_board if 'G' in c['abilities']]:
+            return can_attack, op_board, attackers, targets
+
+        target_pos = np.argmin([c['hp'] for c in enemy_lethals])
+        target_card = enemy_lethals[target_pos]
+        enemy_lethals.pop(target_pos)
+        candidates = copy.deepcopy([c for c in can_attack if c['atk'] >= target_card['hp']])
+        if guards and not candidates:
+            max_atk = max([c['atk'] for c in can_attack])
+            candidates = copy.deepcopy([c for c in can_attack if c['atk'] == max_atk])
+
+        if candidates:
+            attacker_card = candidates[np.argmin([c['hp'] for c in candidates])]
+            attacker = attacker_card['instance']
+            target = target_card['instance']
+    
+            attackers.append(attacker)
+            targets.append(target)
+    
+            target_pos = np.argwhere(np.array([c['instance'] for c in op_board]) == target)[0][0]
+            target_card = op_board[target_pos]
+            if 'L' in attacker_card['abilities']:
+                target_card['hp'] = 0
+            else:
+                target_card['hp'] -= attacker_card['atk']
+            if target_card['hp'] <= 0:
+                op_board.pop(target_pos)
+            attacker_pos = np.argwhere(np.array([c['instance'] for c in can_attack]) == attacker)[0][0]
+            can_attack.pop(attacker_pos)
+
+    while can_attack:
+        if guards and not [1 for c in op_board if 'G' in c['abilities']]:
+            return can_attack, op_board, attackers, targets
+
+        enemies = copy.deepcopy([c for c in op_board if 'W' not in c['abilities'] and 'L' not in c['abilities']])
+        candidates = copy.deepcopy([c for c in can_attack if 'W' not in c['abilities'] and 'L' not in c['abilities']])
+
+        my_atks = [c['atk'] for c in candidates]
+        my_hps = [c['hp'] for c in candidates]
+        op_atks = [c['atk'] for c in enemies]
+        op_hps = [c['hp'] for c in enemies]
+        attacker = None
+        target = None
+        max_enemy_atk = -1
+        min_ally_atk = 1000
+        for i in range(len(candidates)): # kills and survives
+            for j in range(len(enemies)):
+                if my_atks[i] >= op_hps[j] and op_atks[j] < my_hps[i]:
+                    if op_atks[j] > max_enemy_atk or op_atks[j] == max_enemy_atk and my_atks[i] < min_ally_atk:
+                        max_enemy_atk = op_atks[j]
+                        min_ally_atk = my_atks[i]
+                        att = candidates[i]
+                        tar = enemies[j]
+                        attacker = att['instance']
+                        target = tar['instance']
+
+        if attacker is None:
+            max_enemy_atk = -1
+            max_delta = -1
+            for i in range(len(candidates)): # good kill-kill trade
+                for j in range(len(enemies)):
+                    delta = op_atks[j] + op_hps[j] - my_atks[i] - my_hps[i]
+                    if my_atks[i] >= op_hps[j] and delta > 0:
+                        if op_atks[j] > max_enemy_atk or op_atks[j] == max_enemy_atk and delta > max_delta:
+                            max_enemy_atk = op_atks[j]
+                            max_delta = delta
+                            att = candidates[i]
+                            tar = enemies[j]
+                            attacker = att['instance']
+                            target = tar['instance']
+
+        if attacker is None and guards:
+            max_enemy_atk = -1
+            max_delta = -1000
+            for i in range(len(candidates)): # guards ==> bad kill-kill trade
+                for j in range(len(enemies)):
+                    delta = op_atks[j] + op_hps[j] - my_atks[i] - my_hps[i]
+                    if my_atks[i] >= op_hps[j]:
+                        if op_atks[j] > max_enemy_atk or op_atks[j] == max_enemy_atk and delta > max_delta:
+                            max_enemy_atk = op_atks[j]
+                            max_delta = delta
+                            att = candidates[i]
+                            tar = enemies[j]
+                            attacker = att['instance']
+                            target = tar['instance']
+
+        if attacker is None:
+            max_ally_atk = -1
+            min_enemy_atk = 1000
+            for i in range(len(candidates)): # not killing, not getting killed
+                for j in range(len(enemies)):
+                    if my_hps[i] >= op_atks[j]:
+                        if my_atks[i] > max_ally_atk or my_atks[i] == max_ally_atk and op_atks[j] < min_enemy_atk:
+                            max_ally_atk = my_atks[i]
+                            min_enemy_atk = op_atks[j]
+                            att = candidates[i]
+                            tar = enemies[j]
+                            attacker = att['instance']
+                            target = tar['instance']
+
+        if attacker is None:
+            max_ally_delta = -1000
+            max_enemy_atk = -1
+            for i in range(len(candidates)): # not killing, getting killed, if target can get killed
+                for j in range(len(enemies)):
+                    if sum(my_atks) >= op_hps[j] and op_hps[j] > my_atks[i]:
+                        ally_delta = my_atks[i] - my_hps[i]
+                        if op_atks[j] > max_enemy_atk or op_atks[j] == max_enemy_atk and ally_delta > max_ally_delta:
+                            max_enemy_atk = op_atks[j]
+                            max_ally_delta = ally_delta
+                            att = candidates[i]
+                            tar = enemies[j]
+                            attacker = att['instance']
+                            target = tar['instance']
+
+        if attacker is None:
+            if guards:
+                return can_attack, op_board, attackers, targets
+            else:
+                attacker = candidates[0]['instance']
+                target = -1
+
+        attackers.append(attacker)
+        targets.append(target)
+
+        attacker_pos = np.argwhere(np.array([c['instance'] for c in can_attack]) == attacker)[0][0]
+        attacker_card = can_attack[attacker_pos]
+        can_attack.pop(attacker_pos)
+        if target != -1:
+            target_pos = np.argwhere(np.array([c['instance'] for c in op_board]) == target)[0][0]
+            target_card = op_board[target_pos]
+            target_atk = target_card['atk']
+            attacker_atk = attacker_card['atk']
+            if attacker_atk > 0:
+                if 'W' in target_card['abilities']:
+                    target_card['abilities'] = target_card['abilities'].replace('W', '-')
+                elif 'L' in attacker_card['abilities']:
+                    target_card['hp'] = 0
+                else:
+                    target_card['hp'] -= attacker_atk
+            if target_card['hp'] <= 0:
+                op_board.pop(target_pos)
+
+    return can_attack, op_board, attackers, targets
+
+def compute_attacks_main(can_attack, op_board, op_hp):
+    attackers = []
+    targets = []
+
+    guards = [c for c in op_board if 'G' in c['abilities']]
+    if guards:
+        can_attack, op_board, att, tar = compute_attacks(can_attack, op_board, guards=True)
+        print('guards', att, tar, file=sys.stderr)
+        attackers += att
+        targets += tar
+
+    guards = [c for c in op_board if 'G' in c['abilities']]
+    if not guards:
+        can_attack, op_board, att, tar = compute_attacks(can_attack, op_board, op_hp=op_hp, guards=False)
+        print('noguards', att, tar, file=sys.stderr)
+        attackers += att
+        targets += tar
 
     return attackers, targets
-
-    # attackers, targets = compute_attacks # compute variables
-    # for i, attacker in enumerate(attackers):
-    #     target = targets[i]
-    #     actions.append('ATTACK ' + str(attacker) + ' ' + str(target))
-
-    #       attacker_pos = np.argwhere(np.array([c['instance'] for c in can_attack]) == attacker)[0][0]
-    #     attacker_card = can_attack[attacker_pos]
-    #     if target == -1:
-    #         atk = attacker_card['atk']
-    #         op_hp -= atk
-    #         if 'D' in attacker_card['abilities']:
-    #             my_hp += atk
-
-    #       else:
-    #         target_pos = np.argwhere(np.array([c['instance'] for c in op_board]) == target)[0][0]
-    #         target_card = op_board[target_pos]
-    #         attacker_abilities = attacker_card['abilities']
-    #         target_abilities = target_card['abilities']
-    #         if 'W' in attacker_abilities and 'W' in target_abilities:
-    #             attacker_card['abilities'] = attacker_abilities.replace('W', '-') # 0 atk?
-    #             target_card['abilities'] = target_abilities.replace('W', '-')
-
-    #           elif 'W' in attacker_abilities:
 
 # compute my_hp, my_mana, my_rune?, op_hp, op_rune?, my_board, op_board, my_hand, can_attack
 
@@ -278,7 +531,6 @@ while True: # update my_rune, op_rune?
     else: # battle phase
         actions = []
         played = False
-
         plays, targets = compute_plays_before(copy.deepcopy(my_hand), copy.deepcopy(my_board), copy.deepcopy(op_board), copy.deepcopy(can_attack), my_mana) # before-attack play phase
         print('before-attack', plays, targets, file=sys.stderr)
         for i in range(len(plays)):
@@ -348,7 +600,7 @@ while True: # update my_rune, op_rune?
             played = True
 
         attacked = False
-        attackers, targets = compute_attacks(copy.deepcopy(can_attack), copy.deepcopy(op_board)) # attack phase
+        attackers, targets = compute_attacks_main(copy.deepcopy(can_attack), copy.deepcopy(op_board), op_hp) # attack phase
         print('attack', attackers, targets, file=sys.stderr)
         for i in range(len(attackers)):
             attacker = attackers[i]
