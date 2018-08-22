@@ -4,26 +4,28 @@ import copy
 
 turn = 0
 my_deck = []
-draft_vals = {1: 58, 2: 55, 3: 66, 4: 68, 5: 53, 6: 64, 7: 83, 8: 72, 9: 74, 10: 52, 11: 56, 
-12: 75, 13: 61, 14: 41, 15: 76, 16: 46, 17: 76, 18: 78, 19: 75, 20: 45, 21: 70, 
-22: 59, 23: 70, 24: 48, 25: 53, 26: 65, 27: 57, 28: 61, 29: 60, 30: 62, 31: 45, 
-32: 64, 33: 64, 34: 61, 35: 49, 36: 74, 37: 82, 38: 65, 39: 57, 40: 59, 41: 55, 
-42: 46, 43: 64, 44: 90, 45: 61, 46: 54, 47: 69, 48: 76, 49: 73, 50: 59, 51: 83, 
-52: 77, 53: 70, 54: 58, 55: 42, 56: 60, 57: 51, 58: 60, 59: 71, 60: 54, 61: 64, 
-62: 66, 63: 47, 64: 55, 65: 78, 66: 77, 67: 79, 68: 82, 69: 79, 70: 59, 71: 53, 
-72: 54, 73: 76, 74: 61, 75: 71, 76: 62, 77: 65, 78: 51, 79: 65, 80: 81, 81: 57, 
-82: 85, 83: 40, 84: 57, 85: 51, 86: 45, 87: 46, 88: 54, 89: 53, 90: 42, 91: 61, 
-92: 38, 93: 60, 94: 56, 95: 71, 96: 64, 97: 66, 98: 67, 99: 76, 100: 58, 101: 59
-, 102: 53, 103: 79, 104: 68, 105: 71, 106: 65, 107: 53, 108: 50, 109: 75, 110: 44,
- 111: 66, 112: 67, 113: 48, 114: 66, 115: 68, 116: 100, 117: 53, 118: 82, 119:
- 63, 120: 76, 121: 72, 122: 69, 123: 64, 124: 53, 125: 52, 126: 60, 127: 78, 128
-: 73, 129: 76, 130: 71, 131: 51, 132: 53, 133: 83, 134: 58, 135: 61, 136: 54, 137:
- 69, 138: 52, 139: 87, 140: 50, 141: 54, 142: 51, 143: 40, 144: 65, 145: 62, 146:
- 56, 147: 54, 148: 58, 149: 47, 150: 66, 151: 78, 152: 73, 153: 44, 154: 47, 
-155: 59, 156: 45, 157: 51, 158: 69, 159: 56, 160: 42}
+draft_vals = {1: 61.0, 2: 55, 3: 66, 4: 60.9, 5: 53, 6: 64.4, 7: 83, 8: 67.8, 9: 65.9, 10: 52
+, 11: 56, 12: 73.0, 13: 62.4, 14: 41, 15: 70.3, 16: 46, 17: 71.5, 18: 78, 19: 71.5,
+ 20: 45, 21: 70, 22: 59, 23: 72.8, 24: 48, 25: 53, 26: 65, 27: 57, 28: 75.2, 
+29: 74.0, 30: 62, 31: 45, 32: 75.3, 33: 65.3, 34: 59.5, 35: 49, 36: 63.2, 37: 82
+, 38: 67.3, 39: 57, 40: 57.6, 41: 63.4, 42: 46, 43: 64, 44: 80.5, 45: 59.4, 46: 
+54, 47: 67.7, 48: 76, 49: 73, 50: 61.0, 51: 83, 52: 80.5, 53: 75.3, 54: 65.3, 55
+: 42, 56: 59.5, 57: 51, 58: 60, 59: 71, 60: 53.0, 61: 63.4, 62: 62.3, 63: 47, 64
+: 61.0, 65: 80.5, 66: 75.3, 67: 74.0, 68: 82, 69: 74.0, 70: 59, 71: 53, 72: 59.7
+, 73: 71.5, 74: 63.3, 75: 71.5, 76: 60.4, 77: 60.8, 78: 51, 79: 65, 80: 80.2, 81
+: 64.5, 82: 75.1, 83: 53.7, 84: 63.4, 85: 61.0, 86: 45, 87: 46, 88: 71.7, 89: 61.0,
+ 90: 42, 91: 59.5, 92: 38, 93: 67.1, 94: 56, 95: 72.7, 96: 67.9, 97: 66, 98: 
+66.6, 99: 69.2, 100: 57.0, 101: 59, 102: 48.6, 103: 75.2, 104: 64.4, 105: 73.1, 
+106: 66.5, 107: 53, 108: 50, 109: 75, 110: 44, 111: 60.8, 112: 67, 113: 48, 114:
+ 67.7, 115: 71.6, 116: 100, 117: 52.5, 118: 63.3, 119: 62.4, 120: 69.0, 121: 71.6,
+ 122: 63.4, 123: 67.0, 124: 53, 125: 52, 126: 60, 127: 60.8, 128: 70.8, 129: 73.0,
+ 130: 65.3, 131: 51, 132: 52.5, 133: 67.0, 134: 56.7, 135: 67.1, 136: 54, 137:
+ 53.7, 138: 52, 139: 87, 140: 50, 141: 54, 142: 51, 143: 40, 144: 65, 145: 64.4,
+ 146: 56, 147: 54, 148: 69.0, 149: 47, 150: 68.3, 151: 83.2, 152: 73.8, 153: 44,
+ 154: 47, 155: 63.4, 156: 45, 157: 53.0, 158: 73.1, 159: 56, 160: 42}
 min_turn_strength = 4
 max_turn_strength = 26
-curve = {2: 6, 3: 4, 4: 4, 5: 3, 6: 3, 7: 4}
+curve = {2: 7, 3: 5, 4: 4, 5: 3, 6: 2, 7: 3}
 cost_strength = 5
 over_cost_punish_threshold = 2
 over_cost_punish_strength = 1
@@ -188,11 +190,13 @@ def compute_plays_after(my_hand, my_board, op_board, can_attack, mana):
 def compute_attacks(can_attack, op_board, op_hp=1000, guards=False):
     attackers = []
     targets = []
+    save = []
     if guards:
-        op_board = [c for c in op_board if 'G' in c['abilities']]
+        save = copy.deepcopy([c for c in op_board if 'G' not in c['abilities']])
+        op_board = copy.deepcopy([c for c in op_board if 'G' in c['abilities']])
 
     if not guards and sum([c['atk'] for c in can_attack]) >= op_hp:
-        return can_attack, op_board, [c['instance'] for c in can_attack], [-1 for i in range(len(can_attack))]
+        return can_attack, save + op_board, [c['instance'] for c in can_attack], [-1 for i in range(len(can_attack))]
 
     clearing_wards = True
     enemy_wards = copy.deepcopy([c for c in op_board if 'W' in c['abilities']])
@@ -235,9 +239,11 @@ def compute_attacks(can_attack, op_board, op_hp=1000, guards=False):
     wards = copy.deepcopy([c for c in can_attack if 'W' in c['abilities'] and c['atk'] > 0])
     while wards:
         if guards and not [1 for c in op_board if 'G' in c['abilities']]:
-            return can_attack, op_board, attackers, targets
+            return can_attack, save + op_board, attackers, targets
 
         attacker_card = wards[np.argmax([c['atk'] for c in wards])]
+        if [1 for c in wards if 'L' in c['abilities']]:
+            attacker_card = [c for c in wards if 'L' in c['abilities']][0]
         attacker = attacker_card['instance']
         ward_pos = np.argwhere(np.array([c['instance'] for c in wards]) == attacker)[0][0]
         wards.pop(ward_pos)
@@ -284,7 +290,7 @@ def compute_attacks(can_attack, op_board, op_hp=1000, guards=False):
     lethals = copy.deepcopy([c for c in can_attack if 'L' in c['abilities'] and c['atk'] > 0])
     while lethals:
         if guards and not [1 for c in op_board if 'G' in c['abilities']]:
-            return can_attack, op_board, attackers, targets
+            return can_attack, save + op_board, attackers, targets
 
         attacker_card = lethals[np.argmin([c['hp'] for c in lethals])]
         attacker = attacker_card['instance']
@@ -319,13 +325,13 @@ def compute_attacks(can_attack, op_board, op_hp=1000, guards=False):
     enemy_lethals = copy.deepcopy([c for c in op_board if 'L' in c['abilities'] and 'W' not in c['abilities']])
     while enemy_lethals:
         if guards and not [1 for c in op_board if 'G' in c['abilities']]:
-            return can_attack, op_board, attackers, targets
+            return can_attack, save + op_board, attackers, targets
 
         target_pos = np.argmin([c['hp'] for c in enemy_lethals])
         target_card = enemy_lethals[target_pos]
         enemy_lethals.pop(target_pos)
         candidates = copy.deepcopy([c for c in can_attack if c['atk'] >= target_card['hp']])
-        if guards and not candidates:
+        if guards and can_attack and not candidates:
             max_atk = max([c['atk'] for c in can_attack])
             candidates = copy.deepcopy([c for c in can_attack if c['atk'] == max_atk])
 
@@ -350,7 +356,7 @@ def compute_attacks(can_attack, op_board, op_hp=1000, guards=False):
 
     while can_attack:
         if guards and not [1 for c in op_board if 'G' in c['abilities']]:
-            return can_attack, op_board, attackers, targets
+            return can_attack, save + op_board, attackers, targets
 
         enemies = copy.deepcopy([c for c in op_board if 'W' not in c['abilities'] and 'L' not in c['abilities']])
         candidates = copy.deepcopy([c for c in can_attack if 'W' not in c['abilities'] and 'L' not in c['abilities']])
@@ -435,7 +441,7 @@ def compute_attacks(can_attack, op_board, op_hp=1000, guards=False):
 
         if attacker is None:
             if guards:
-                return can_attack, op_board, attackers, targets
+                return can_attack, save + op_board, attackers, targets
             else:
                 attacker = candidates[0]['instance']
                 target = -1
@@ -461,7 +467,7 @@ def compute_attacks(can_attack, op_board, op_hp=1000, guards=False):
             if target_card['hp'] <= 0:
                 op_board.pop(target_pos)
 
-    return can_attack, op_board, attackers, targets
+    return can_attack, save + op_board, attackers, targets
 
 def compute_attacks_main(can_attack, op_board, op_hp):
     attackers = []
@@ -596,7 +602,6 @@ while True: # update my_rune, op_rune?
 
         attacked = False
         attackers, targets = compute_attacks_main(copy.deepcopy(can_attack), copy.deepcopy(op_board), op_hp) # attack phase
-        print('attack', attackers, targets, file=sys.stderr)
         for i in range(len(attackers)):
             attacker = attackers[i]
             target = targets[i]
