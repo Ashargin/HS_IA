@@ -309,13 +309,18 @@ def compute_attacks(can_attack, op_board, op_hp=1000, guards=False):
             target_card = max_hps[np.argmax([c['atk'] for c in max_hps])]
 
         if target_card is not None:
-            target = target_card['instance']
-            attackers.append(attacker)
-            targets.append(target)
-            target_pos = np.argwhere(np.array([c['instance'] for c in op_board]) == target)[0][0]
-            op_board.pop(target_pos)
-            attacker_pos = np.argwhere(np.array([c['instance'] for c in can_attack]) == attacker)[0][0]
-            can_attack.pop(attacker_pos)
+            attacking = True
+            if guards and save:
+                if not [1 for c in op_board if 'W' in c['abilities']] and sum([c['atk'] for c in can_attack if 'L' not in c['abilities']]) >= sum([c['hp'] for c in op_board]) and max([c['hp'] for c in op_board]) < max([c['hp'] for c in save]):
+                    attacking = False
+            if attacking:
+                target = target_card['instance']
+                attackers.append(attacker)
+                targets.append(target)
+                target_pos = np.argwhere(np.array([c['instance'] for c in op_board]) == target)[0][0]
+                op_board.pop(target_pos)
+                attacker_pos = np.argwhere(np.array([c['instance'] for c in can_attack]) == attacker)[0][0]
+                can_attack.pop(attacker_pos)
         elif not guards:
             attackers.append(attacker)
             targets.append(-1)
@@ -327,10 +332,13 @@ def compute_attacks(can_attack, op_board, op_hp=1000, guards=False):
         if guards and not [1 for c in op_board if 'G' in c['abilities']]:
             return can_attack, save + op_board, attackers, targets
 
-        target_pos = np.argmin([c['hp'] for c in enemy_lethals])
-        target_card = enemy_lethals[target_pos]
-        enemy_lethals.pop(target_pos)
+        lethal_pos = np.argmin([c['hp'] for c in enemy_lethals])
+        target_card = enemy_lethals[lethal_pos]
         candidates = copy.deepcopy([c for c in can_attack if c['atk'] >= target_card['hp']])
+        if len(candidates) == 1:
+            candidate = candidates[0]
+            if candidate['hp'] >= target_card['hp'] + 2:
+                candidates = []
         if guards and can_attack and not candidates:
             max_atk = max([c['atk'] for c in can_attack])
             candidates = copy.deepcopy([c for c in can_attack if c['atk'] == max_atk])
@@ -342,7 +350,7 @@ def compute_attacks(can_attack, op_board, op_hp=1000, guards=False):
     
             attackers.append(attacker)
             targets.append(target)
-    
+
             target_pos = np.argwhere(np.array([c['instance'] for c in op_board]) == target)[0][0]
             target_card = op_board[target_pos]
             if 'L' in attacker_card['abilities']:
@@ -353,6 +361,9 @@ def compute_attacks(can_attack, op_board, op_hp=1000, guards=False):
                 op_board.pop(target_pos)
             attacker_pos = np.argwhere(np.array([c['instance'] for c in can_attack]) == attacker)[0][0]
             can_attack.pop(attacker_pos)
+            enemy_lethals = copy.deepcopy([c for c in op_board if 'L' in c['abilities'] and 'W' not in c['abilities']])
+        else:
+            enemy_lethals.pop(lethal_pos)
 
     while can_attack:
         if guards and not [1 for c in op_board if 'G' in c['abilities']]:
@@ -386,7 +397,7 @@ def compute_attacks(can_attack, op_board, op_hp=1000, guards=False):
             for i in range(len(candidates)): # good kill-kill trade
                 for j in range(len(enemies)):
                     delta = op_atks[j] + op_hps[j] - my_atks[i] - my_hps[i]
-                    if my_atks[i] >= op_hps[j] and delta > 0:
+                    if my_atks[i] >= op_hps[j] and (delta > 0 or delta == 0 and my_atks[i] >= op_atks[j]):
                         if op_atks[j] > max_enemy_atk or op_atks[j] == max_enemy_atk and delta > max_delta:
                             max_enemy_atk = op_atks[j]
                             max_delta = delta
@@ -415,7 +426,7 @@ def compute_attacks(can_attack, op_board, op_hp=1000, guards=False):
             min_enemy_atk = 1000
             for i in range(len(candidates)): # not killing, not getting killed
                 for j in range(len(enemies)):
-                    if my_hps[i] >= op_atks[j]:
+                    if my_hps[i] > op_atks[j]:
                         if my_atks[i] > max_ally_atk or my_atks[i] == max_ally_atk and op_atks[j] < min_enemy_atk:
                             max_ally_atk = my_atks[i]
                             min_enemy_atk = op_atks[j]
