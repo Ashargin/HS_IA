@@ -1,6 +1,7 @@
 import sys
 import numpy as np
 import copy
+import itertools
 
 turn = 0
 my_deck = []
@@ -35,6 +36,7 @@ spells_target = 6
 spells_strength = 3
 duplicate_strength = 8
 cost_advantage = 22
+
 
 def draft_score(card, deck):
     card_type = card['type']
@@ -79,13 +81,11 @@ def draft_score(card, deck):
     val = draft_vals[card['id']]
     return val + cost_bonus + draw_bonus + spell_bonus + duplicate_bonus
 
-def play_score(card, mana, my_board, op_board):
+
+def play_score(card, my_board, op_board, op_hp):
     card_score = draft_vals[card['id']]
     cost = card['cost']
     card_type = card['type']
-
-    if cost < mana:
-        card_score -= cost_advantage * (mana - cost)
 
     target = 0
     if card_type == 1:
@@ -105,87 +105,102 @@ def play_score(card, mana, my_board, op_board):
 
     return card_score, target
 
-def compute_plays_before(my_hand, my_board, op_board, can_attack, mana):
-    can_play = True
+
+def compute_plays(my_hand, my_board, op_board, mana, op_hp):
     plays = []
     targets = []
 
-    if [1 for c in my_hand if c['type'] == 0 and c['cost'] <= mana]:
-        max_cost_creature = max([c['cost'] for c in my_hand if c['type'] == 0 and c['cost'] <= mana])
-        if not [1 for c in my_hand if c['cost'] == max_cost_creature and c['type'] == 0 and 'C' in c['abilities']]:
-            mana -= max_cost_creature
+    playable_0 = [card for card in my_hand if card['cost'] <= mana and card['type'] == 0]
+    if len(my_board) == 6:
+        playable_0 = []
+    playable_1 = [card for card in my_hand if card['cost'] <= mana and card['type'] == 1]
+    if not my_board:
+        playable_1 = []
+    playable_2 = [card for card in my_hand if card['cost'] <= mana and card['type'] == 2]
+    if not op_board:
+        playable_2 = []
+    playable_3 = [card for card in my_hand if card['cost'] <= mana and card['type'] == 3]
+    playable = copy.deepcopy(playable_0 + playable_1 + playable_2 + playable_3)
 
-    while can_play:
-        # only charge minions before attacking
-        playable_0 = [card for card in my_hand if card['cost'] <= mana and card['type'] == 0 and 'C' in card['abilities']]
-        if len(my_board) == 6:
-            playable_0 = []
-        playable_1 = [card for card in my_hand if card['cost'] <= mana and card['type'] == 1]
-        if not my_board:
-            playable_1 = []
-        playable_2 = [card for card in my_hand if card['cost'] <= mana and card['type'] == 2]
-        if not op_board:
-            playable_2 = []
-        playable_3 = [card for card in my_hand if card['cost'] <= mana and card['type'] == 3]
-        playable = copy.deepcopy(playable_0 + playable_1 + playable_2 + playable_3)
+    if not playable:
+        return [], []
 
-        if not playable:
-            can_play = False
-        else:
-            round_scores, round_targets = zip(*[play_score(card, mana, my_board, op_board) for card in playable])
-            round_play_pos = np.argmax(round_scores)
-            round_play_card = playable[round_play_pos]
-            round_play = round_play_card['instance']
-            cost = round_play_card['cost']
-            card_type = round_play_card['type']
-            round_target = round_targets[round_play_pos]
+    max_score = -1
+    for combination in itertools.product(*([[0, 1]] * len(playable))):
+        if sum([playable[i]['cost'] for i in range(len(playable)) if combination[i] == 1]) <= mana:
+            cards = copy.deepcopy([playable[i] for i in range(len(playable)) if combination[i] == 1])
+            perms = list(itertools.permutations(range(len(cards))))
+            for perm in perms:
+                perm_score = 0
+                perm_plays = []
+                perm_targets = []
+                my_board_copy = copy.deepcopy(my_board)
+                op_board_copy = copy.deepcopy(op_board)
+                op_hp_copy = op_hp
+                
+                for i in range(len(cards)):
+                    card = cards[np.argwhere(np.array(perm) == i)[0][0]]
+                    if card['type'] == 0 and len(my_board_copy) == 6:
+                        perm_score = -1000
+                    elif card['type'] == 1 and not my_board_copy:
+                        perm_score = -1000
+                    elif card['type'] == 2 and not op_board_copy:
+                        perm_score = -1000
+                    score, target = play_score(card, my_board_copy, op_board_copy, op_hp_copy)
+                    perm_score += score * card['cost']
 
-            hand_pos = np.argwhere(np.array([c['instance'] for c in my_hand]) == round_play)[0][0]
-            my_hand.pop(hand_pos)
-            if card_type == 0:
-                my_board.append(copy.deepcopy(round_play_card))
-            elif card_type > 1 and round_target != -1:
-                target_pos = np.argwhere(np.array([c['instance'] for c in op_board]) == round_target)[0][0]
-                target_card = op_board[target_pos]
-                if 'W' in target_card['abilities']:
-                    target_card['abilities'] = target_card['abilities'].replace('W', '-')
-                else:
-                    target_card['hp'] += round_play_card['hp']
-                if target_card['hp'] <= 0:
-                    op_board.pop(target_pos)
-            mana -= cost
-    
-            plays.append(round_play)
-            targets.append(round_target)
+                    perm_plays.append(card)
+                    perm_targets.append(target)
+
+                    op_hp_copy += card['op_hp_change']
+        
+                    card_type = card['type']
+                    if card_type == 0:
+                        my_board_copy.append(copy.deepcopy(card))
+        
+                    elif card_type == 1:
+                        target_pos = np.argwhere(np.array([c['instance'] for c in my_board_copy]) == target)[0][0]
+                        target_card = my_board_copy[target_pos]
+                        target_card['atk'] += card['atk']
+                        target_card['hp'] += card['hp']
+                        for i, v in enumerate(card['abilities']):
+                            if v != '-':
+                                target_card['abilities'] = target_card['abilities'][:i] + v + target_card['abilities'][i+1:]
+        
+                    elif card_type == 2:
+                        target_pos = np.argwhere(np.array([c['instance'] for c in op_board_copy]) == target)[0][0]
+                        target_card = op_board_copy[target_pos]
+                        target_card['atk'] += card['atk']
+                        for i, v in enumerate(card['abilities']):
+                            if v != '-':
+                                target_card['abilities'] = target_card['abilities'].replace(v, '-')
+                        if 'W' in target_card['abilities'] and card['hp'] < 0:
+                            target_card['abilities'] = target_card['abilities'].replace('W', '-')
+                        else:
+                            target_card['hp'] += card['hp']
+                        if target_card['hp'] <= 0:
+                            op_board_copy.pop(target_pos)
+        
+                    else:
+                        if target != -1:
+                            target_pos = np.argwhere(np.array([c['instance'] for c in op_board_copy]) == target)[0][0]
+                            target_card = op_board_copy[target_pos]
+                            if 'W' in target_card['abilities'] and card['hp'] < 0:
+                                target_card['abilities'] = target_card['abilities'].replace('W', '-')
+                            else:
+                                target_card['hp'] += card['hp']
+                            if target_card['hp'] <= 0:
+                                op_board_copy.pop(target_pos)
+                        else:
+                            op_hp_copy += card['hp']
+
+                if perm_score > max_score:
+                    max_score = perm_score
+                    plays = perm_plays
+                    targets = perm_targets
 
     return plays, targets
 
-def compute_plays_after(my_hand, my_board, op_board, can_attack, mana):
-    can_play = True
-    summons = []
-
-    while can_play:
-        playable = copy.deepcopy([card for card in my_hand if card['cost'] <= mana and card['type'] == 0])
-        if len(my_board) == 6:
-            playable = []
-
-        if not playable:
-            can_play = False
-        else:
-            round_scores, round_targets = zip(*[play_score(card, mana, my_board, op_board) for card in playable])
-            round_play_pos = np.argmax(round_scores)
-            round_play_card = playable[round_play_pos]
-            round_play = round_play_card['instance']
-            cost = round_play_card['cost']
-
-            hand_pos = np.argwhere(np.array([c['instance'] for c in my_hand]) == round_play)[0][0]
-            my_hand.pop(hand_pos)
-            my_board.append(copy.deepcopy(round_play_card))
-            mana -= cost
-    
-            summons.append(round_play)
-
-    return summons
 
 def compute_attacks(can_attack, op_board, op_hp=1000, guards=False):
     attackers = []
@@ -480,6 +495,7 @@ def compute_attacks(can_attack, op_board, op_hp=1000, guards=False):
 
     return can_attack, save + op_board, attackers, targets
 
+
 def compute_attacks_main(can_attack, op_board, op_hp):
     attackers = []
     targets = []
@@ -500,9 +516,8 @@ def compute_attacks_main(can_attack, op_board, op_hp):
 
     return attackers, targets
 
-# compute my_hp, my_mana, my_rune?, op_hp, op_rune?, my_board, op_board, my_hand, can_attack
 
-while True: # update my_rune, op_rune?
+while True: # my_rune, op_rune are not updated
 
     # inputs
     my_hp, my_mana, my_deck_count, my_rune = [int(j) for j in input().split()]
@@ -543,8 +558,9 @@ while True: # update my_rune, op_rune?
     else: # battle phase
         actions = []
         played = False
-        plays, targets = compute_plays_before(copy.deepcopy(my_hand), copy.deepcopy(my_board), copy.deepcopy(op_board), copy.deepcopy(can_attack), my_mana) # before-attack play phase
-        print('before-attack', plays, targets, file=sys.stderr)
+        plays, targets = compute_plays(copy.deepcopy(my_hand), copy.deepcopy(my_board), copy.deepcopy(op_board), my_mana, op_hp) # before-attack play phase
+        targets = [targets[i] for i in range(len(plays)) if plays[i]['type'] > 0 or 'C' in plays[i]['abilities']]
+        plays = [plays[i]['instance'] for i in range(len(plays)) if plays[i]['type'] > 0 or 'C' in plays[i]['abilities']]
         for i in range(len(plays)):
             play = plays[i]
             target = targets[i]
@@ -589,7 +605,7 @@ while True: # update my_rune, op_rune?
                 for i, v in enumerate(card['abilities']):
                     if v != '-':
                         target_card['abilities'] = target_card['abilities'].replace(v, '-')
-                if 'W' in target_card['abilities']:
+                if 'W' in target_card['abilities'] and card['hp'] < 0:
                     target_card['abilities'] = target_card['abilities'].replace('W', '-')
                 else:
                     target_card['hp'] += card['hp']
@@ -600,7 +616,7 @@ while True: # update my_rune, op_rune?
                 if target != -1:
                     target_pos = np.argwhere(np.array([c['instance'] for c in op_board]) == target)[0][0]
                     target_card = op_board[target_pos]
-                    if 'W' in target_card['abilities']:
+                    if 'W' in target_card['abilities'] and card['hp'] < 0:
                         target_card['abilities'] = target_card['abilities'].replace('W', '-')
                     else:
                         target_card['hp'] += card['hp']
@@ -653,8 +669,6 @@ while True: # update my_rune, op_rune?
                         target_card['hp'] -= attacker_atk
                         if 'D' in attacker_card['abilities']:
                             my_hp += attacker_atk
-                can_attack_pos = np.argwhere(np.array([c['instance'] for c in can_attack]) == attacker)[0][0]
-                can_attack[can_attack_pos] = copy.deepcopy(attacker_card)
     
                 if target_card['hp'] <= 0:
                     op_board.pop(target_pos)
@@ -662,28 +676,87 @@ while True: # update my_rune, op_rune?
                         op_hp += target_card['hp']
                 if attacker_card['hp'] <= 0:
                     my_board.pop(attacker_pos)
-                    can_attack.pop(can_attack_pos)
+
+            can_attack_pos = np.argwhere(np.array([c['instance'] for c in can_attack]) == attacker)[0][0]
+            can_attack.pop(can_attack_pos)
 
             attacked = True
 
-        summons = compute_plays_after(copy.deepcopy(my_hand), copy.deepcopy(my_board), copy.deepcopy(op_board), copy.deepcopy(can_attack), my_mana) # after-attack play phase
-        print('after-attack', summons, file=sys.stderr)
-        for i in range(len(summons)):
-            summon = summons[i]
-
-            actions.append('SUMMON ' + str(summon))
-
-            play_pos = np.argwhere(np.array([c['instance'] for c in my_hand]) == summon)[0][0]
+        plays, targets = compute_plays(copy.deepcopy(my_hand), copy.deepcopy(my_board), copy.deepcopy(op_board), my_mana, op_hp) # after-attack play phase
+        plays = [c['instance'] for c in plays]
+        print('after-attack', plays, targets, file=sys.stderr)
+        for i in range(len(plays)):
+            play = plays[i]
+            target = targets[i]
+            play_pos = np.argwhere(np.array([c['instance'] for c in my_hand]) == play)[0][0]
             card = my_hand[play_pos]
-            if 'C' in card['abilities']:
-                guard = False
-                for op_card in op_board:
-                    if 'G' in op_card['abilities']:
-                        guard = True
-                if not guard:
-                    actions.append('ATTACK ' + str(summon) + ' -1') # can be done better
+            card_type = card['type']
+
+            if card_type == 0:
+                actions.append('SUMMON ' + str(play))
+            else:
+                actions.append('USE ' + str(play) + ' ' + str(target))
+
+            my_hp += card['my_hp_change']
+            my_mana -= card['cost']
+            op_hp += card['op_hp_change']
+            my_hand.pop(play_pos)
+
+            if card_type == 0:
+                my_board.append(copy.deepcopy(card))
+                if 'C' in card['abilities']:
+                    can_attack.append(copy.deepcopy(card))
+
+            elif card_type == 1:
+                for board in [can_attack, my_board]:
+                    try:
+                        target_pos = np.argwhere(np.array([c['instance'] for c in board]) == target)[0][0]
+                        target_card = board[target_pos]
+                        target_card['atk'] += card['atk']
+                        target_card['hp'] += card['hp']
+                        for i, v in enumerate(card['abilities']):
+                            if v != '-':
+                                target_card['abilities'] = target_card['abilities'][:i] + v + target_card['abilities'][i+1:]
+                        if 'C' in target_card['abilities'] and target not in [c['instance'] for c in can_attack]:
+                            can_attack.append(copy.deepcopy(target_card))
+                    except IndexError:
+                        pass
+
+            elif card_type == 2:
+                target_pos = np.argwhere(np.array([c['instance'] for c in op_board]) == target)[0][0]
+                target_card = op_board[target_pos]
+                target_card['atk'] += card['atk']
+                for i, v in enumerate(card['abilities']):
+                    if v != '-':
+                        target_card['abilities'] = target_card['abilities'].replace(v, '-')
+                if 'W' in target_card['abilities'] and card['hp'] < 0:
+                    target_card['abilities'] = target_card['abilities'].replace('W', '-')
+                else:
+                    target_card['hp'] += card['hp']
+                if target_card['hp'] <= 0:
+                    op_board.pop(target_pos)
+
+            else:
+                if target != -1:
+                    target_pos = np.argwhere(np.array([c['instance'] for c in op_board]) == target)[0][0]
+                    target_card = op_board[target_pos]
+                    if 'W' in target_card['abilities'] and card['hp'] < 0:
+                        target_card['abilities'] = target_card['abilities'].replace('W', '-')
+                    else:
+                        target_card['hp'] += card['hp']
+                    if target_card['hp'] <= 0:
+                        op_board.pop(target_pos)
+                else:
+                    op_hp += card['hp']
 
             played = True
+
+        attackers, targets = compute_attacks_main(copy.deepcopy(can_attack), copy.deepcopy(op_board), op_hp) # last attack phase
+        for i in range(len(attackers)):
+            attacker = attackers[i]
+            target = targets[i]
+
+            actions.append('ATTACK ' + str(attacker) + ' ' + str(target))
 
         if not played and not attacked:
             actions = ['PASS']
