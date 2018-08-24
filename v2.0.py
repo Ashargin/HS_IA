@@ -83,27 +83,90 @@ def draft_score(card, deck):
 
 
 def play_score(card, my_board, op_board, op_hp):
-    card_score = draft_vals[card['id']]
-    cost = card['cost']
+    score = draft_vals[card['id']]
+    target = 0
     card_type = card['type']
 
-    target = 0
+    if card_type == 0:
+        if [1 for c in op_board if 'L' in c['abilities'] and ('W' not in c['abilities'] and card['atk'] >= c['hp'] and card['hp'] >= c['hp'] + 3 or ('W' in c['abilities'] or card['atk'] < c['hp']) and card['hp'] >= c['hp'] - 1) or 'L' not in card['abilities'] and 'W' not in card['abilities'] and c['atk'] >= card['hp'] and (card['atk'] < c['hp'] or 'W' in c['abilities'])]:
+            score -= 30
+        
     if card_type == 1:
-        target_pos = np.argmax([c['atk'] for c in my_board])
-        target = my_board[target_pos]['instance']
+        if len(my_board) >= len(op_board):
+            score += 10
+        if 'L' not in card['abilities'] and (card['hp'] >= 2 and card['atk'] <= 1 or 'W' in card['abilities']) and [1 for c in my_board if 'L' in c['abilities']]: # powers lethal card up
+            candidates = [c for c in my_board if 'L' in c['abilities']]
+            target = candidates[np.argmin([c['hp'] for c in candidates])]['instance']
+            score += 25
+        else: # power any card up
+            abilities = [x for x in card['abilities'] if x != '-']
+            candidates = candidates = [c for c in my_board if not [1 for x in abilities if x in c['abilities']]]
+            if candidates:
+                target = candidates[np.argmin([c['hp'] for c in candidates])]['instance']
+                score += 5
+            else:
+                score = -1
 
     elif card_type == 2:
-        target_pos = np.argmax([c['atk'] for c in op_board])
-        target = op_board[target_pos]['instance']
+        if card['id'] not in (151, 152) and [1 for c in op_board if 'L' in c['abilities'] and 'W' not in c['abilities'] and c['hp'] <= -card['hp']]: # kills lethal
+            candidates = [c for c in op_board if 'L' in c['abilities'] and 'W' not in c['abilities'] and c['hp'] <= -card['hp']]
+            target = candidates[np.argmax([c['hp'] for c in candidates])]['instance']
+            score += 40
+        elif card['id'] in (151, 152): # big removal
+            if [1 for c in op_board if c['hp'] >= 6 and (c['atk'] >= 4 or 'L' in c['abilities']) and c['hp'] <= -card['hp']] and len(my_board) >= len(op_board) - 2:
+                candidates = [c for c in op_board if c['hp'] >= 6 and (c['atk'] >= 4 or 'L' in c['abilities']) and c['hp'] <= -card['hp']]
+                target = candidates[np.argmax([c['atk'] for c in candidates])]['instance']
+                score += 20
+            else:
+                score = -1
+        elif [1 for c in op_board if 'L' in c['abilities'] or 'W' in c['abilities']] and 'L' in card['abilities']: # removes lethal/ward
+            candidates = [c for c in op_board if 'L' in c['abilities'] or 'W' in c['abilities']]
+            if [1 for c in candidates if c['hp'] <= -card['hp']]:
+                candidates = [c for c in candidates if c['hp'] <= -card['hp']]
+            target = candidates[np.argmax([c['atk'] for c in candidates])]['instance']
+            score += 20
+        elif [1 for c in op_board if 'W' not in c['abilities'] and c['hp'] <= -card['hp'] and c['hp'] >= -card['hp'] - 1]: # good kill
+            candidates = [c for c in op_board if 'W' not in c['abilities'] and c['hp'] <= -card['hp'] and c['hp'] >= -card['hp'] - 1]
+            target = candidates[np.argmax([c['atk'] for c in candidates])]['instance']
+            score += 10
+        elif [1 for c in op_board if 'W' in c['abilities']] and -card['hp'] == 1: # clears ward
+            candidates = [c for c in op_board if 'W' in c['abilities']]
+            target = candidates[np.argmax([c['atk'] for c in candidates])]['instance']
+            score += 10
+        elif my_board:
+            if [1 for c in op_board if c['hp'] > max([c2['atk'] for c2 in my_board])]:
+                candidates = [c for c in op_board if c['hp'] > max([c2['atk'] for c2 in my_board])]
+                target = candidates[np.argmax([c['atk'] for c in candidates])]['instance']
+            else:
+                score = -1
+        else:
+            score = -1
+        if len(my_board) <= len(op_board) - 2 and score > 0:
+            score -= 10
 
     elif card_type == 3:
-        if op_board:
-            target_pos = np.argmax([c['atk'] for c in op_board])
-            target = op_board[target_pos]['instance']
+        if [1 for c in op_board if 'L' in c['abilities'] and 'W' not in c['abilities'] and c['hp'] <= -card['hp']]: # kills lethal
+            candidates = [c for c in op_board if 'L' in c['abilities'] and 'W' not in c['abilities'] and c['hp'] <= -card['hp']]
+            target = candidates[np.argmax([c['hp'] for c in candidates])]['instance']
+            score += 40
+        elif [1 for c in op_board if 'W' not in c['abilities'] and c['hp'] <= -card['hp'] and c['hp'] >= -card['hp'] - 1]: # good kill
+            candidates = [c for c in op_board if 'W' not in c['abilities'] and c['hp'] <= -card['hp'] and c['hp'] >= -card['hp'] - 1]
+            target = candidates[np.argmax([c['atk'] for c in candidates])]['instance']
+            score += 10
+        elif [1 for c in op_board if 'W' in c['abilities']] and -card['hp'] == 1: # clears ward
+            candidates = [c for c in op_board if 'W' in c['abilities']]
+            target = candidates[np.argmax([c['atk'] for c in candidates])]['instance']
+            score += 10
+        elif my_board:
+            if [1 for c in op_board if c['hp'] > max([c2['atk'] for c2 in my_board])]:
+                candidates = [c for c in op_board if c['hp'] > max([c2['atk'] for c2 in my_board])]
+                target = candidates[np.argmax([c['atk'] for c in candidates])]['instance']
+            else:
+                score = -1
         else:
-            target = -1
+            score = -1
 
-    return card_score, target
+    return score, target
 
 
 def compute_plays(my_hand, my_board, op_board, mana, op_hp):
@@ -147,53 +210,58 @@ def compute_plays(my_hand, my_board, op_board, mana, op_hp):
                     elif card['type'] == 2 and not op_board_copy:
                         perm_score = -1000
                     score, target = play_score(card, my_board_copy, op_board_copy, op_hp_copy)
-                    perm_score += score * card['cost']
-
-                    perm_plays.append(card)
-                    perm_targets.append(target)
-
-                    op_hp_copy += card['op_hp_change']
-        
-                    card_type = card['type']
-                    if card_type == 0:
-                        my_board_copy.append(copy.deepcopy(card))
-        
-                    elif card_type == 1:
-                        target_pos = np.argwhere(np.array([c['instance'] for c in my_board_copy]) == target)[0][0]
-                        target_card = my_board_copy[target_pos]
-                        target_card['atk'] += card['atk']
-                        target_card['hp'] += card['hp']
-                        for i, v in enumerate(card['abilities']):
-                            if v != '-':
-                                target_card['abilities'] = target_card['abilities'][:i] + v + target_card['abilities'][i+1:]
-        
-                    elif card_type == 2:
-                        target_pos = np.argwhere(np.array([c['instance'] for c in op_board_copy]) == target)[0][0]
-                        target_card = op_board_copy[target_pos]
-                        target_card['atk'] += card['atk']
-                        for i, v in enumerate(card['abilities']):
-                            if v != '-':
-                                target_card['abilities'] = target_card['abilities'].replace(v, '-')
-                        if 'W' in target_card['abilities'] and card['hp'] < 0:
-                            target_card['abilities'] = target_card['abilities'].replace('W', '-')
-                        else:
+                    if card['type'] == 0 or score != -1:
+                        perm_score += score * card['cost']
+                        if card['cost'] == 0:
+                            perm_score += score
+    
+                        perm_plays.append(card)
+                        perm_targets.append(target)
+    
+                        op_hp_copy += card['op_hp_change']
+            
+                        card_type = card['type']
+                        if card_type == 0:
+                            my_board_copy.append(copy.deepcopy(card))
+            
+                        elif card_type == 1:
+                            target_pos = np.argwhere(np.array([c['instance'] for c in my_board_copy]) == target)[0][0]
+                            target_card = my_board_copy[target_pos]
+                            target_card['atk'] += card['atk']
                             target_card['hp'] += card['hp']
-                        if target_card['hp'] <= 0:
-                            op_board_copy.pop(target_pos)
-        
-                    else:
-                        if target != -1:
+                            for i, v in enumerate(card['abilities']):
+                                if v != '-':
+                                    target_card['abilities'] = target_card['abilities'][:i] + v + target_card['abilities'][i+1:]
+            
+                        elif card_type == 2:
                             target_pos = np.argwhere(np.array([c['instance'] for c in op_board_copy]) == target)[0][0]
                             target_card = op_board_copy[target_pos]
+                            target_card['atk'] += card['atk']
+                            for i, v in enumerate(card['abilities']):
+                                if v != '-':
+                                    target_card['abilities'] = target_card['abilities'].replace(v, '-')
                             if 'W' in target_card['abilities'] and card['hp'] < 0:
                                 target_card['abilities'] = target_card['abilities'].replace('W', '-')
                             else:
                                 target_card['hp'] += card['hp']
                             if target_card['hp'] <= 0:
                                 op_board_copy.pop(target_pos)
+            
                         else:
-                            op_hp_copy += card['hp']
-
+                            if target != -1:
+                                target_pos = np.argwhere(np.array([c['instance'] for c in op_board_copy]) == target)[0][0]
+                                target_card = op_board_copy[target_pos]
+                                if 'W' in target_card['abilities'] and card['hp'] < 0:
+                                    target_card['abilities'] = target_card['abilities'].replace('W', '-')
+                                else:
+                                    target_card['hp'] += card['hp']
+                                if target_card['hp'] <= 0:
+                                    op_board_copy.pop(target_pos)
+                            else:
+                                op_hp_copy += card['hp']
+                    else:
+                        perm_score = -1000
+    
                 if perm_score > max_score:
                     max_score = perm_score
                     plays = perm_plays
@@ -559,8 +627,8 @@ while True: # my_rune, op_rune are not updated
         actions = []
         played = False
         plays, targets = compute_plays(copy.deepcopy(my_hand), copy.deepcopy(my_board), copy.deepcopy(op_board), my_mana, op_hp) # before-attack play phase
-        targets = [targets[i] for i in range(len(plays)) if plays[i]['type'] > 0 or 'C' in plays[i]['abilities']]
-        plays = [plays[i]['instance'] for i in range(len(plays)) if plays[i]['type'] > 0 or 'C' in plays[i]['abilities']]
+        plays = [plays[i]['instance'] for i in range(len(plays))]
+        print('before-attack', plays, targets, file=sys.stderr)
         for i in range(len(plays)):
             play = plays[i]
             target = targets[i]
