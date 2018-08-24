@@ -2,6 +2,7 @@ import sys
 import numpy as np
 import copy
 import itertools
+import time
 
 turn = 0
 my_deck = []
@@ -88,24 +89,49 @@ def play_score(card, my_board, op_board, op_hp):
     card_type = card['type']
 
     if card_type == 0:
-        if [1 for c in op_board if 'L' in c['abilities'] and ('W' not in c['abilities'] and card['atk'] >= c['hp'] and card['hp'] >= c['hp'] + 3 or ('W' in c['abilities'] or card['atk'] < c['hp']) and card['hp'] >= c['hp'] - 1) or 'L' not in card['abilities'] and 'W' not in card['abilities'] and c['atk'] >= card['hp'] and (card['atk'] < c['hp'] or 'W' in c['abilities'])]:
+        if 'C' in card['abilities'] and 'L' in card['abilities']:
+            if len(my_board) >= len(op_board):
+                score += 10
+            target_candidates = [c for c in op_board if 'W' not in c['abilities']]
+            if [1 for c in op_board if 'G' in c['abilities']]:
+                target_candidates = [c for c in op_board if 'G' in c['abilities'] and 'W' not in c['abilities']]
+            if [1 for c in target_candidates if c['hp'] >= 6 and (c['atk'] >= 3 or 'L' in c['abilities'])]:
+                score += 20
+            elif [1 for c in target_candidates if c['hp'] >= 5 and (c['atk'] >= 2 or 'L' in c['abilities'])]:
+                pass
+            elif [1 for c in target_candidates if c['hp'] >= 4 and (c['atk'] >= 2 or 'L' in c['abilities'])] and len(my_board) >= len(op_board):
+                score -= 20
+            else:
+                score = -1
+        elif [1 for c in op_board if 'L' in c['abilities'] and ('W' not in card['abilities'] or 'C' not in card['abilities']) and ('W' not in c['abilities'] and (card['atk'] >= c['hp'] or 'L' in card['abilities']) and card['hp'] >= c['hp'] + 3 or ('W' in c['abilities'] or card['atk'] < c['hp'] and 'L' not in card['abilities']) and card['hp'] >= c['hp'] - 1) or 'L' not in card['abilities'] and 'W' not in card['abilities'] and c['atk'] >= card['hp'] and (card['atk'] < c['hp'] or 'W' in c['abilities'])]:
             score -= 30
+            if card['cost'] >= 5:
+                score -= 20
+            if card['cost'] >= 6:
+                score = 13 - card['cost']
+        if card['id'] == 116:
+            score = draft_vals[116]
         
     if card_type == 1:
         if len(my_board) >= len(op_board):
             score += 10
-        if 'L' not in card['abilities'] and (card['hp'] >= 2 and card['atk'] <= 1 or 'W' in card['abilities']) and [1 for c in my_board if 'L' in c['abilities']]: # powers lethal card up
+        if 'L' not in card['abilities'] and (card['atk'] <= 1 and (card['hp'] >= 2 or 'W' in card['abilities'])) and [1 for c in my_board if 'L' in c['abilities'] and ('W' not in c['abilities'] or 'W' not in card['abilities'])]: # powers lethal card up
             candidates = [c for c in my_board if 'L' in c['abilities']]
             target = candidates[np.argmin([c['hp'] for c in candidates])]['instance']
             score += 25
         else: # power any card up
             abilities = [x for x in card['abilities'] if x != '-']
-            candidates = candidates = [c for c in my_board if not [1 for x in abilities if x in c['abilities']]]
+            candidates = [c for c in my_board if not 'L' in c['abilities'] and not [1 for x in abilities if x in c['abilities']] and ('W' in card['abilities'] or 'L' in card['abilities'] or [1 for c2 in op_board if ('W' not in c2['abilities'] and ('L' not in c2['abilities'] or 'W' in c['abilities']) and (c['atk'] >= c2['hp'] or 'L' in c['abilities']) and c['hp'] + card['hp'] > c2['atk'] or 'W' not in c2['abilities'] and 'L' not in c['abilities'] and c['atk'] < c2['hp'] and c['atk'] + card['atk'] >= c2['hp'] and c2['hp'] - c['atk'] >= card['atk'] - 1)])]
             if candidates:
                 target = candidates[np.argmin([c['hp'] for c in candidates])]['instance']
+                if 'W' in card['abilities']:
+                    target = candidates[np.argmax([c['atk'] for c in candidates])]['instance']
                 score += 5
             else:
                 score = -1
+            if 'L' in card['abilities']:
+                if [1 for c in op_board if 'G' in c['abilities']] and not [1 for c in op_board if 'G' in c['abilities'] and 'W' not in c['abilities']] or not [1 for c in op_board if 'W' not in c['abilities']]:
+                    score = -1
 
     elif card_type == 2:
         if card['id'] not in (151, 152) and [1 for c in op_board if 'L' in c['abilities'] and 'W' not in c['abilities'] and c['hp'] <= -card['hp']]: # kills lethal
@@ -170,6 +196,7 @@ def play_score(card, my_board, op_board, op_hp):
 
 
 def compute_plays(my_hand, my_board, op_board, mana, op_hp):
+    time_start = time.time()
     plays = []
     targets = []
 
@@ -190,6 +217,10 @@ def compute_plays(my_hand, my_board, op_board, mana, op_hp):
 
     max_score = -1
     for combination in itertools.product(*([[0, 1]] * len(playable))):
+        t = time.time() - time_start
+        if t > 0.1:
+            return plays, targets
+        
         if sum([playable[i]['cost'] for i in range(len(playable)) if combination[i] == 1]) <= mana:
             cards = copy.deepcopy([playable[i] for i in range(len(playable)) if combination[i] == 1])
             perms = list(itertools.permutations(range(len(cards))))
@@ -274,6 +305,7 @@ def compute_attacks(can_attack, op_board, op_hp=1000, guards=False):
     attackers = []
     targets = []
     save = []
+
     if guards:
         save = copy.deepcopy([c for c in op_board if 'G' not in c['abilities']])
         op_board = copy.deepcopy([c for c in op_board if 'G' in c['abilities']])
@@ -301,7 +333,7 @@ def compute_attacks(can_attack, op_board, op_hp=1000, guards=False):
                     attacker_card = higher_hps[np.argmax([c['hp'] for c in higher_hps])]
                 else:
                     attacker_card = lowest_atks[np.argmin([c['hp'] for c in lowest_atks])]
-                if attacker_card['atk'] <= 3 and (attacker_card['hp'] > target_card['atk'] or attacker_card['hp'] <= target_card['atk'] - 2):
+                if attacker_card['atk'] <= 3 and (attacker_card['hp'] > target_card['atk'] or attacker_card['hp'] <= target_card['atk'] - 2) or attacker_card['atk'] <= 1 and 'W' in attacker_card['abilities']:
                     finding_candidate = False
                     attacker = attacker_card['instance']
                     target = target_card['instance']
