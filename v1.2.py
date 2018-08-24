@@ -12,7 +12,7 @@ def draft_score(card, deck):
     card_type = card['type']
     if card_type == 0:
         return 10 * (atk - 1.5 * cost)
-    else: # spell
+    else:  # spell
         return -1000
 
 
@@ -25,7 +25,7 @@ def battle_score(card, mana):
         card_score -= cost_advantage * (mana - cost)
     elif cost > mana:
         card_score = -1000
-    if card_type > 0: # spell
+    if card_type > 0:  # spell
         card_score = -1000
     return card_score
 
@@ -61,15 +61,15 @@ while True:
         else:
             op_board.append(card)
 
-    if turn < 30: # draft phase
+    if turn < 30:  # draft phase
         scores = [draft_score(card, my_deck) for card in my_hand]
         pick = np.argmax(scores)
         print('PICK ' + str(pick))
         my_deck.append(my_hand[pick])
 
-    else: # battle phase
+    else:  # battle phase
         actions = []
-        can_play = True #play phase
+        can_play = True  # play phase
         played = False
         my_board_count = len(my_board)
         while can_play:
@@ -91,7 +91,7 @@ while True:
                 can_play = False
 
         attacked = False
-        for my_card in my_board: # attack phase
+        for my_card in my_board:  # attack phase
             if my_card['atk'] > 0:
                 attacked = True
                 guard = False
